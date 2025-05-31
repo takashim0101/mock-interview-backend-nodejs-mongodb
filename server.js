@@ -37,12 +37,12 @@ const chatSchema = new mongoose.Schema({
 const ChatSession = mongoose.model('ChatSession', chatSchema);
 // ====================================================================
 
-const app = express();
+const app = express(); // add a comment to trigger redeploy  <-- ここにコメントを追加
 const port = process.env.PORT || 3000;
 
 //CORS setting
 app.use(cors({
-    origin: 'http://localhost:5173', 
+    origin: 'http://localhost:5173',
 }));
 
 
