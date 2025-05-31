@@ -60,11 +60,12 @@ if (!API_KEY) {
 }
 const genAI = new GoogleGenerativeAI(API_KEY);
 
+// A map for saving conversation history (this will be replaced with a database this time)
 // Map to store conversation history (simple example, use a database in production)
-// const chatHistories = new Map();
+// const chatHistories = new Map(); This line will become unnecessary, but I will comment it out just in case.
 
 //Routing setting
-app.post('/interview', async (req, res) => {
+app.post('/api/interview', async (req, res) => {
     const { sessionId, jobTitle, userResponse } = req.body;
 
     if (!sessionId || !jobTitle || userResponse === undefined) {
