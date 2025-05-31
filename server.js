@@ -38,8 +38,16 @@ const ChatSession = mongoose.model('ChatSession', chatSchema);
 // ====================================================================
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3000;
 
+//CORS setting
+app.use(cors({
+    origin: 'http://localhost:5173', 
+}));
+
+
+// Middleware
+// app.use(cors());
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -55,6 +63,7 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 // Map to store conversation history (simple example, use a database in production)
 // const chatHistories = new Map();
 
+//Routing setting
 app.post('/interview', async (req, res) => {
     const { sessionId, jobTitle, userResponse } = req.body;
 
