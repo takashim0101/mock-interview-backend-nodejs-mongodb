@@ -62,9 +62,9 @@ jobs:
           auth-type: SERVICE_PRINCIPAL
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v2 # <-- ここを v2 に戻してください！
+        uses: azure/webapps-deploy@v2 # <-- ここが v2 になっていることを確認！
         with:
           app-name: 'mockinterviewapp-backend-takashi01'
           slot-name: 'Production'
           package: .
-          enable-oryx-build: true # この行は v2 でサポートされています
+          enable-oryx-build: true # この行が残っていることを確認！
