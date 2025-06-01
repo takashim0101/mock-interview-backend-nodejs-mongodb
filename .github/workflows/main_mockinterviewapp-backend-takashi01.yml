@@ -19,8 +19,7 @@ jobs:
       - name: Set up Node.js version
         uses: actions/setup-node@v3
         with:
-          node-version: '18.x' # Changed to 18.x to match your Azure App Service setting
-          # Consider changing this back to 22.x later if you confirm Express 4.17.1 works fine with Node.js 22.x locally.
+          node-version: '18.x' # Set to 18.x to match your Azure App Service setting. You can test 22.x later if needed.
 
       - name: npm install, build, and test
         run: |
@@ -63,6 +62,7 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DE95F72921FA45E9B291A934DD6F6ED75 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3D8C02EEC437468194CDE7242E06C6E5 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_2893712FC95E4564961A934DD6F6ED75 }}
+          client-secret: ${{ secrets.AZUREAPPSERVICE_CLIENT_SECRET }} # THIS IS THE CRITICAL LINE ADDED!
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
