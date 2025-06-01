@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read # This is required for actions/checkout
 
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +21,7 @@ jobs:
       - name: Set up Node.js version
         uses: actions/setup-node@v3
         with:
-          node-version: '22.x'
+          node-version: '22.x' # Ensure this matches your package.json's tested version
 
       - name: npm install, build, and test
         run: |
@@ -30,7 +30,24 @@ jobs:
           npm run test --if-present
 
       - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+        run: |
+          # Create a temporary directory to build the final package structure
+          mkdir -p package_for_deploy
+          
+          # Copy all application files (like server.js, package.json, etc.)
+          # from the current working directory (.) to deploy_package/
+          cp -r ./* package_for_deploy/
+          
+          # Copy the node_modules directory into the deploy_package/
+          # node_modules should exist in the current directory after 'npm install'
+          cp -r node_modules package_for_deploy/
+          
+          # Change to the deploy_package directory
+          cd package_for_deploy
+          
+          # Zip the contents of deploy_package (which now contains node_modules at its root)
+          # The '..' means the zip file will be created one level up (in the original working directory)
+          zip -r ../release.zip .
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -45,8 +62,8 @@ jobs:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write # This is required for requesting the JWT
+      contents: read # This is required for actions/checkout
 
     steps:
       - name: Download artifact from build job
@@ -70,7 +87,8 @@ jobs:
         with:
           app-name: 'mockinterviewapp-backend-takashi01'
           slot-name: 'Production'
-          package: .
+          package: . # Deploy the contents of the current directory (which is where the unzipped artifact resides)
+          # Important: Ensure 'enable-oryx-build' and 'scm-do-build-during-deployment' are NOT present here.
           
           
           
