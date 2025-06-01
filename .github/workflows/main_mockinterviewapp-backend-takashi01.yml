@@ -62,9 +62,11 @@ jobs:
           auth-type: SERVICE_PRINCIPAL
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v2 # <-- ここが v2 になっていることを確認！
+        uses: azure/webapps-deploy@v2 # v2のままです
         with:
           app-name: 'mockinterviewapp-backend-takashi01'
           slot-name: 'Production'
           package: .
-          enable-oryx-build: true # この行が残っていることを確認！
+          # IMPORTANT CHANGE: enable-oryx-build は削除します
+          # 代わりに startup-command を使って npm install と node server.js を実行します
+          startup-command: 'npm install && node server.js' # <-- この行を追加・修正します！
