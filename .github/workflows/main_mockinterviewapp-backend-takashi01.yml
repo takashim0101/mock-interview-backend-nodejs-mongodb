@@ -71,7 +71,6 @@ jobs:
           app-name: 'mockinterviewapp-backend-takashi01'
           slot-name: 'Production'
           package: .
-          enable-oryx-build: false         
-          scm-do-build-during-deployment: false 
+          
           
           
