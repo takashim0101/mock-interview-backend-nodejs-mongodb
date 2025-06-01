@@ -1,6 +1,6 @@
 // Import necessary modules
 const express = require('express');
-const cors = require('cors'); // Middleware for enabling Cross-Origin Resource Sharing
+const cors = require('cors'); // Middleware for enabling Cross-Origin Resource Sharing - (Re-added)
 const dotenv = require('dotenv'); // To load environment variables from .env file
 const { GoogleGenerativeAI } = require('@google/generative-ai'); // Google Gemini API SDK
 const mongoose = require('mongoose'); // Mongoose for MongoDB object modeling
@@ -21,7 +21,7 @@ if (!DB_CONNECTION_STRING) {
 mongoose.connect(DB_CONNECTION_STRING)
     .then(() => console.log('Successfully connected to MongoDB!'))
     .catch(err => {
-        console.error('MongoDB connection error:', err);
+        console.error('MongoDB connection error:', err, err.message);
         // Exit the application if database connection fails, as it's critical
         process.exit(1);
     });
@@ -31,11 +31,11 @@ const chatSchema = new mongoose.Schema({
     sessionId: {
         type: String,
         required: true,
-        unique: true // Ensure each session ID is unique
+        unique: true
     },
-    history: [{ // Array to store conversation turns
+    history: [{
         role: {
-            type: String, // 'user' or 'model' (as per Gemini API roles)
+            type: String,
             required: true
         },
         text: {
@@ -44,18 +44,18 @@ const chatSchema = new mongoose.Schema({
         },
         timestamp: {
             type: Date,
-            default: Date.now // Automatically set creation time for each message
+            default: Date.now
         }
     }],
     jobTitle: {
-        type: String, // The job title for which the interview is conducted
-        required: true // Job title is essential for interview context
+        type: String,
+        required: true
     },
     createdAt: {
         type: Date,
-        default: Date.now // Timestamp for when the session was first created
+        default: Date.now
     },
-    updatedAt: { // Add an 'updatedAt' field for tracking last modification
+    updatedAt: {
         type: Date,
         default: Date.now
     }
@@ -73,22 +73,23 @@ const ChatSession = mongoose.model('ChatSession', chatSchema);
 
 // Initialize the Express application
 const app = express();
-const port = process.env.PORT || 3000; // Use port from .env or default to 3000
+const port = process.env.PORT || 8080; // Use port from .env or default to 8080
 
 // --- CORS Configuration ---
 // Define allowed origins for Cross-Origin Resource Sharing.
 // This is crucial for security and allowing your frontend to communicate.
 const allowedOrigins = [
     'http://localhost:5173', // Default Vite dev server port for your React frontend
-    // Add other local development origins if necessary (e.g., 'http://localhost:3000')
-    // In production, uncomment and add your deployed frontend's URL:
-    // 'https://your-deployed-frontend-domain.com'
+    'https://lively-coast-026e29100.6.azurestaticapps.net' // Your deployed frontend's URL on Azure Static Web Apps
+    // You might also add your backend's URL here if needed,
+    // 'https://mockinterviewapp-backend-takashi01-d3c7e4gpcba9gxb0.centralindia-01.azurewebsites.net'
 ];
 
 const corsOptions = {
     origin: function (origin, callback) {
         // Allow requests with no origin (e.g., same-origin requests, mobile apps, Postman/curl)
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        // This is key for Postman when `*` is not used in Azure Portal CORS settings.
+        if (!origin || allowedOrigins.includes(origin)) { // Changed from indexOf to includes for clarity
             callback(null, true);
         } else {
             callback(new Error(`Not allowed by CORS: ${origin}`));
@@ -111,50 +112,26 @@ const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 // Check if Google API Key is provided
 if (!GOOGLE_API_KEY) {
     console.error('Error: GOOGLE_API_KEY is not set in the .env file. Please provide it to use the Gemini API.');
-    process.exit(1); // Exit if API key is missing
+    process.exit(1);
 }
 const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
 
 // --- API Routes ---
-
-/**
- * POST /api/interview
- * Main endpoint for managing mock interview conversations.
- * It fetches/creates a chat session, interacts with the Gemini AI,
- * updates the conversation history, and saves it to MongoDB.
- *
- * Request Body:
- * {
- * sessionId: string,    // Unique ID for the current interview session
- * jobTitle: string,     // The job title for which the interview is being conducted
- * userResponse: string  // The user's latest response or an empty string for the initial prompt
- * }
- *
- * Response Body:
- * {
- * response: string,                 // The AI's latest response
- * history: Array<{ role: string, text: string, timestamp: Date }> // Full conversation history
- * }
- */
 app.post('/api/interview', async (req, res) => {
     const { sessionId, jobTitle, userResponse } = req.body;
 
-    // Basic input validation
     if (!sessionId || !jobTitle || userResponse === undefined) {
         return res.status(400).json({ error: 'Missing sessionId, jobTitle, or userResponse in request body.' });
     }
 
     let chatSession;
     try {
-        // Find an existing chat session by sessionId in the database
         chatSession = await ChatSession.findOne({ sessionId });
 
-        // If no session exists, create a new one
         if (!chatSession) {
             chatSession = new ChatSession({ sessionId, jobTitle, history: [] });
             console.log(`New session created for ID: ${sessionId}`);
         } else {
-            // If session exists, update jobTitle (in case it changed or was refined)
             chatSession.jobTitle = jobTitle;
             console.log(`Existing session found for ID: ${sessionId}`);
         }
@@ -163,15 +140,12 @@ app.post('/api/interview', async (req, res) => {
         return res.status(500).json({ error: 'Failed to access chat session in database.' });
     }
 
-    // Get the current conversation history from the database object
-    // This `history` variable is the one stored in MongoDB
     let history = chatSession.history;
 
     try {
-        // Configure the Gemini model
         const model = genAI.getGenerativeModel({
-            model: "gemini-1.5-flash", // Using the flash model for potentially faster responses
-            systemInstruction: { // Instructions for the AI's persona and task
+            model: "gemini-1.5-flash",
+            systemInstruction: {
                 parts: [
                     { text: `You are an AI interviewer for a job titled "${jobTitle}".` },
                     { text: `Your goal is to conduct a mock interview by asking relevant questions.` },
@@ -183,48 +157,31 @@ app.post('/api/interview', async (req, res) => {
                 ]
             },
             generationConfig: {
-                responseMimeType: "text/plain", // Ensure response is plain text
+                responseMimeType: "text/plain",
             },
         });
 
-        // Prepare the history array specifically for the Gemini API's `startChat` method.
-        // This array must always start with a 'user' role.
         let historyForGemini = history.map(item => ({
             role: item.role,
             parts: [{ text: item.text }]
         }));
 
-        let messageToSendToGemini = userResponse; // The actual message to send to Gemini for the current turn
+        let messageToSendToGemini = userResponse;
 
-        // --- Crucial Logic for Handling Initial Interview Start ---
-        // If it's the very first request (history from DB is empty),
-        // we need to inject an implicit 'user' message to properly start the Gemini chat.
         if (history.length === 0) {
-            // The frontend sends userResponse: '' to trigger the start.
-            // We use a predefined prompt as the effective 'user' input for this first turn.
-            messageToSendToGemini = userResponse || "start a mock interview"; // Use this as the "user's" first message to Gemini
-            // At this point, we DO NOT add this to `chatSession.history` yet.
-            // We'll add it after getting the AI's first response, ensuring correct order.
+            messageToSendToGemini = userResponse || "start a mock interview";
         } else {
-            // For subsequent turns (history is not empty), the user's actual response
-            // is added to the session history immediately. This ensures the 'user' role
-            // is correctly placed before the 'model' role in the persisted history.
             chatSession.history.push({ role: 'user', text: userResponse });
-            // Also, add it to the temporary array being prepared for the current Gemini API call.
             historyForGemini.push({ role: 'user', parts: [{ text: userResponse }] });
         }
-        // --- End Crucial Logic for Handling Initial Interview Start ---
 
-        // Start a new chat session with the model, providing the correctly formatted history.
         const chat = model.startChat({
             history: historyForGemini
         });
 
-        // Send the appropriate message (either the user's actual response or the initial prompt) to Gemini.
         const apiResponse = await chat.sendMessageStream(messageToSendToGemini);
 
         let fullResponse = '';
-        // Process the streamed response from the AI.
         for await (const chunk of apiResponse.stream) {
             if (typeof chunk.text === 'function') {
                 fullResponse += chunk.text();
@@ -239,26 +196,17 @@ app.post('/api/interview', async (req, res) => {
             }
         }
 
-        // --- Final History Update Logic for Persistence ---
-        // If the `chatSession.history` was empty before this turn (meaning it was the initial request),
-        // we now explicitly add the user's initial *implicit* prompt, followed by the AI's first question.
-        // This ensures the history stored in MongoDB correctly begins with a 'user' role.
         if (history.length === 0) {
             chatSession.history.push({ role: 'user', text: messageToSendToGemini });
         }
-        // Always add the AI's response to the conversation history.
         chatSession.history.push({ role: 'model', text: fullResponse });
-        // --- End Final History Update Logic for Persistence ---
 
-        // Save the updated conversation history to MongoDB.
         await chatSession.save();
 
-        // Send the AI's latest response and the full updated history back to the frontend.
         res.json({ response: fullResponse, history: chatSession.history });
 
     } catch (error) {
         console.error('Error during Gemini API call or session saving:', error);
-        // Provide a more informative error message to the frontend.
         res.status(500).json({ error: 'Failed to process interview request or get AI response. Please check backend logs for details.' });
     }
 });
@@ -268,5 +216,6 @@ app.listen(port, () => {
     console.log(`Backend server running on http://localhost:${port}`);
     console.log(`MongoDB connection string in use: ${DB_CONNECTION_STRING ? 'Set' : 'NOT SET (check .env)'}`);
     console.log(`Google API Key in use: ${GOOGLE_API_KEY ? 'Set' : 'NOT SET (check .env)'}`);
-    console.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
+    // Log the origins explicitly allowed by the server.js CORS config
+    console.log(`CORS allowed origins in server.js: ${allowedOrigins.join(', ')}`);
 });
