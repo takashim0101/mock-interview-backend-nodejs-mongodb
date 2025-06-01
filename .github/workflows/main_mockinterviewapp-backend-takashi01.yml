@@ -34,9 +34,17 @@ jobs:
           # Create a temporary directory to build the final package structure
           mkdir -p package_for_deploy
           
+          # Enable extended pattern matching for exclusion
+          shopt -s extglob 
+          
           # Copy all application files (like server.js, package.json, etc.)
           # from the current working directory (.) to deploy_package/
-          cp -r ./* package_for_deploy/
+          # Exclude the 'package_for_deploy' directory itself from the copy
+          # This ensures 'cp: cannot copy a directory, './package_for_deploy', into itself' is avoided.
+          cp -r !(package_for_deploy)/ !(package_for_deploy).* package_for_deploy/
+          
+          # Disable extended pattern matching after use
+          shopt -u extglob
           
           # Copy the node_modules directory into the deploy_package/
           # node_modules should exist in the current directory after 'npm install'
