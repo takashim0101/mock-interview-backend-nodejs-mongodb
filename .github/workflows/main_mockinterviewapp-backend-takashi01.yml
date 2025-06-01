@@ -14,14 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # This is required for actions/checkout
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Node.js version
         uses: actions/setup-node@v3
         with:
-          node-version: '22.x' # Ensure this matches your package.json's tested version
+          node-version: '18.x' # Changed to 18.x to match your Azure App Service setting
+          # Consider changing this back to 22.x later if you confirm Express 4.17.1 works fine with Node.js 22.x locally.
 
       - name: npm install, build, and test
         run: |
@@ -31,31 +30,10 @@ jobs:
 
       - name: Zip artifact for deployment
         run: |
-          # Create a temporary directory to build the final package structure
-          mkdir -p package_for_deploy
-          
-          # Enable extended pattern matching for exclusion
-          shopt -s extglob 
-          
-          # Copy all application files (like server.js, package.json, etc.)
-          # from the current working directory (.) to deploy_package/
-          # Exclude the 'package_for_deploy' directory itself from the copy
-          # This ensures 'cp: cannot copy a directory, './package_for_deploy', into itself' is avoided.
-          cp -r !(package_for_deploy)/ !(package_for_deploy).* package_for_deploy/
-          
-          # Disable extended pattern matching after use
-          shopt -u extglob
-          
-          # Copy the node_modules directory into the deploy_package/
-          # node_modules should exist in the current directory after 'npm install'
-          cp -r node_modules package_for_deploy/
-          
-          # Change to the deploy_package directory
-          cd package_for_deploy
-          
-          # Zip the contents of deploy_package (which now contains node_modules at its root)
-          # The '..' means the zip file will be created one level up (in the original working directory)
-          zip -r ../release.zip .
+          # Zip the contents of the current directory (your repo root)
+          # This assumes package.json, server.js, node_modules etc., are at the root level of your Git repository.
+          # Exclude the .git directory and the workflow files themselves from the zip
+          zip -r release.zip . -x ".git/*" ".github/workflows/*"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -72,23 +50,19 @@ jobs:
     permissions:
       id-token: write # This is required for requesting the JWT
       contents: read # This is required for actions/checkout
-
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: node-app
-
       - name: Unzip artifact for deployment
         run: unzip release.zip
-      
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DE95F72921FA45E9B291A5AD76BCD307 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DE95F72921FA45E9B291A934DD6F6ED75 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3D8C02EEC437468194CDE7242E06C6E5 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_2893712FC95E4564961A934DD6F6ED75 }}
-
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
@@ -97,6 +71,3 @@ jobs:
           slot-name: 'Production'
           package: . # Deploy the contents of the current directory (which is where the unzipped artifact resides)
           # Important: Ensure 'enable-oryx-build' and 'scm-do-build-during-deployment' are NOT present here.
-          
-          
-          
