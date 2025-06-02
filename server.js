@@ -12,10 +12,10 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(express.json());
 
-// CORS configuration (元に戻す前に使っていた設定)
+// CORS configuration 
 const allowedOrigins = [
     'http://localhost:5173',
-    'https://lively-coast-026e29100.6.azurestaticapps.net' // Vercelは削除
+    'https://lively-coast-026e29100.6.azurestaticapps.net' 
 ];
 
 app.use(cors({
