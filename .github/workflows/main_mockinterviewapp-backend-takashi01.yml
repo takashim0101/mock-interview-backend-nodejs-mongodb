@@ -26,7 +26,7 @@ jobs:
           npm ci # Installs dependencies cleanly (preferred for CI/CD)
           npm run build --if-present # Runs the 'build' script if defined in package.json
           npm run test --if-present # Runs the 'test' script if defined in package.json
-        env: # IMPORTANT FIX: This 'env' block must be at the same indentation level as 'run'
+        env: # IMPORTANT: This 'env' block must be at the same indentation level as 'run'
           DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }} # Pass secret to the runner's environment
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }} # Pass secret to the runner's environment
 
@@ -70,26 +70,10 @@ jobs:
         id: deploy-to-webapp # Assigns an ID to this step to reference its outputs
         uses: azure/webapps-deploy@v2 # Action to deploy to Azure Web Apps
         with:
-
+          # All parameters for webapps-deploy action should be defined only ONCE here.
           app-name: 'mockinterviewapp-backend-takashi01' # Your Azure Web App name
           slot-name: 'Production' # Target deployment slot (e.g., 'Production')
           package: . # The package to deploy ('.' means current directory after unzipping)
-          # IMPORTANT: Azure App Service for Node.js automatically runs 'npm install'
-          # if it detects a package.json. So, we generally only need to provide
-          # the command to start the application after dependencies are installed.
+          # Azure App Service for Node.js automatically runs 'npm install' if package.json is present.
+          # So, we generally only need to provide the command to start the application after dependencies are installed.
           startup-command: 'node server.js' # Specifies the command to start your Node.js application
-
-          app-name: 'mockinterviewapp-backend-takashi01'
-          slot-name: 'Production'
-          package: .
-          # IMPORTANT CHANGE: enable-oryx-build は削除します
-
-          # Instead, use startup-command to run npm install and node server.js
-          startup-command: 'npm install && node server.js' # <-- Add or modify the line! Overwrite this and
-          # Also, ensure your Azure App Service's 'Configuration' -> 'Application settings'
-          # have DB_CONNECTION_STRING and GOOGLE_API_KEY set for runtime.
-
-          # 代わりに startup-command を使って npm install と node server.js を実行します
-          startup-command: 'npm install && node server.js' # <-- この行を追加・修正します！
-
-
