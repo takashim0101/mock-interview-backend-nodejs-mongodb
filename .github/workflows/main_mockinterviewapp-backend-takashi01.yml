@@ -70,7 +70,6 @@ jobs:
         id: deploy-to-webapp # Assigns an ID to this step to reference its outputs
         uses: azure/webapps-deploy@v2 # Action to deploy to Azure Web Apps
         with:
-          # All parameters for webapps-deploy action should be defined only ONCE here.
           app-name: 'mockinterviewapp-backend-takashi01' # Your Azure Web App name
           slot-name: 'Production' # Target deployment slot (e.g., 'Production')
           package: . # The package to deploy ('.' means current directory after unzipping)

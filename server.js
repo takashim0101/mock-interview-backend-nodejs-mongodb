@@ -1,12 +1,10 @@
 // C:\Level 5\Mission 3_1\mock-interview-backend-nodejs-mongodb\server.js
 
-// Using ES Module imports instead of CommonJS require()
-import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import dotenv from 'dotenv';
-dotenv.config(); // Initialize dotenv for environment variables
-import { GoogleGenerativeAI } from '@google/generative-ai';
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+require('dotenv').config();
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,14 +12,10 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(express.json());
 
-// CORS configuration
+// CORS configuration (元に戻す前に使っていた設定)
 const allowedOrigins = [
     'http://localhost:5173',
-    'https://lively-coast-026e29100.6.azurestaticapps.net',
-    'https://mock-interview-frontend-react-mongo.vercel.app' // ADDED Vercel frontend URL here
-    // If you have specific preview URLs from Vercel that you also want to allow,
-    // you might add them here, or consider a wildcard like 'https://*.vercel.app'
-    // but be aware of the security implications of wildcards in production.
+    'https://lively-coast-026e29100.6.azurestaticapps.net' // Vercelは削除
 ];
 
 app.use(cors({
@@ -59,7 +53,7 @@ if (GOOGLE_API_KEY) {
 const ChatSessionSchema = new mongoose.Schema({
     sessionId: { type: String, required: true, unique: true },
     jobTitle: { type: String, required: true },
-    history: { type: Array, default: [] }, // Stores conversation history
+    history: { type: Array, default: [] },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 });
@@ -86,11 +80,10 @@ app.post('/api/interview', async (req, res) => {
         let chatSession = await ChatSession.findOne({ sessionId });
 
         if (!chatSession) {
-            // New session
             chatSession = new ChatSession({
                 sessionId,
                 jobTitle,
-                history: [] // Start with an empty history for a new session
+                history: []
             });
             console.log(`New chat session created for sessionId: ${sessionId}`);
         }
@@ -111,20 +104,15 @@ app.post('/api/interview', async (req, res) => {
             }
         });
 
-        // Determine the message to send to Gemini
         let messageToGemini = userResponse;
         if (chatSession.history.length === 0 && userResponse === '') {
             messageToGemini = "start a mock interview";
         }
 
-        // Prepare history for Gemini, including the current user message (if not already part of persistent history)
-        // Gemini's startChat `history` is for *past* turns. The current `messageToGemini` is sent separately.
         const chat = model.startChat({
             history: formatHistoryForGemini(chatSession.history)
         });
 
-        // Add user's message to persistent history *before* sending to Gemini,
-        // using the message that was actually generated/sent to Gemini
         chatSession.history.push({ role: 'user', text: messageToGemini });
 
         const result = await chat.sendMessageStream(messageToGemini);
@@ -133,10 +121,8 @@ app.post('/api/interview', async (req, res) => {
             geminiResponseText += chunk.text();
         }
 
-        // Add Gemini's response to history
         chatSession.history.push({ role: 'model', text: geminiResponseText });
 
-        // Save the updated session history
         await chatSession.save();
 
         res.json({
@@ -155,13 +141,9 @@ app.post('/api/interview', async (req, res) => {
     }
 });
 
-// The server instance, which we will store and then close in tests.
 let server;
 
-// This block ensures the server only starts listening when server.js is run directly,
-// not when it's imported as a module for testing.
-// In ESM, 'require.main === module' is replaced by checking 'import.meta.url'
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
     server = app.listen(port, () => {
         console.log(`Backend server running on http://localhost:${port}`);
         console.log(`MongoDB connection string in use: ${DB_CONNECTION_STRING ? 'Set' : 'NOT SET (check .env)'}`);
@@ -170,12 +152,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     });
 }
 
-// Export the Express app instance for testing purposes
-// Using 'export default' for the main app instance
-export default app;
-
-// If you need to export 'serverInstance' for tests, consider how your tests import it.
-// For example, if tests need to import the server itself to close it:
-// export { server };
-// However, the typical way to handle this in ESM is to import the app and use supertest,
-// which manages its own server instance.
+module.exports = app;
+if (server) {
+    module.exports.serverInstance = server;
+}
