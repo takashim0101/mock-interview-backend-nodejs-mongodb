@@ -1,10 +1,12 @@
 // C:\Level 5\Mission 3_1\mock-interview-backend-nodejs-mongodb\server.js
 
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-require('dotenv').config();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+// Using ES Module imports instead of CommonJS require()
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import dotenv from 'dotenv';
+dotenv.config(); // Initialize dotenv for environment variables
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -17,8 +19,8 @@ const allowedOrigins = [
     'http://localhost:5173',
     'https://lively-coast-026e29100.6.azurestaticapps.net',
     'https://mock-interview-frontend-react-mongo.vercel.app' // ADDED Vercel frontend URL here
-    // If I have specific preview URLs from Vercel that you also want to allow,
-    // I might add them here, or consider a wildcard like 'https://*.vercel.app'
+    // If you have specific preview URLs from Vercel that you also want to allow,
+    // you might add them here, or consider a wildcard like 'https://*.vercel.app'
     // but be aware of the security implications of wildcards in production.
 ];
 
@@ -158,7 +160,8 @@ let server;
 
 // This block ensures the server only starts listening when server.js is run directly,
 // not when it's imported as a module for testing.
-if (require.main === module) {
+// In ESM, 'require.main === module' is replaced by checking 'import.meta.url'
+if (import.meta.url === `file://${process.argv[1]}`) {
     server = app.listen(port, () => {
         console.log(`Backend server running on http://localhost:${port}`);
         console.log(`MongoDB connection string in use: ${DB_CONNECTION_STRING ? 'Set' : 'NOT SET (check .env)'}`);
@@ -167,12 +170,12 @@ if (require.main === module) {
     });
 }
 
-// Export the Express app instance and the server instance for testing purposes
-module.exports = app;
-// We also export 'server' so tests can close it.
-// This is only defined if the server was started via require.main === module.
-// In test environments, `app` is imported and Supertest handles its own server.
-// So this export will likely be undefined in tests, but that's okay.
-if (server) {
-    module.exports.serverInstance = server;
-}
+// Export the Express app instance for testing purposes
+// Using 'export default' for the main app instance
+export default app;
+
+// If you need to export 'serverInstance' for tests, consider how your tests import it.
+// For example, if tests need to import the server itself to close it:
+// export { server };
+// However, the typical way to handle this in ESM is to import the app and use supertest,
+// which manages its own server instance.
