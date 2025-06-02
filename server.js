@@ -99,7 +99,6 @@ app.post('/api/interview', async (req, res) => {
             console.log(`New chat session created for sessionId: ${sessionId}`);
         }
 
-        // Ensure geminiAi is initialized (a redundant check if process.exit(1) works as expected, but good for robustness)
         if (!geminiAi) {
             throw new Error('Gemini AI is not initialized. GOOGLE_API_KEY might be missing or invalid.');
         }
@@ -108,27 +107,32 @@ app.post('/api/interview', async (req, res) => {
             model: "gemini-1.5-flash",
             systemInstruction: {
                 role: "system",
+                // --- IMPORTANT CHANGE: Updated system instruction for the AI ---
+                // This new instruction tells Gemini exactly how to start and when to end the interview.
                 parts: [{
-                    text: `You are an expert technical interviewer for a job titled "${jobTitle}".
-                    Your goal is to ask relevant, challenging questions to assess the candidate's skills for this role.
-                    Focus on practical, scenario-based questions and dive deep into their responses.
-                    Maintain a professional and encouraging tone.
-                    If the user response is empty for the first question, start with a general introductory question.
-                    If the user response is empty for subsequent questions, prompt them to provide more details or ask if they'd like to move to the next question.
-                    Keep responses concise and direct.`
+                    text: `You are an AI interviewer for a job titled "${jobTitle}".
+                    Your goal is to conduct a mock interview by asking relevant questions.
+                    Start by asking the user to "Tell me about yourself.".
+                    After that, ask up to 6 follow-up questions one at a time, based on the user's responses and the job title.
+                    Ensure your questions are typical for a job interview.
+                    Once the 6 questions are asked, provide constructive feedback on the user's answers and interview performance.
+                    Keep your responses concise and professional.`
                 }]
             }
         });
 
         let messageToGemini = userResponse;
-        if (chatSession.history.length === 0 && userResponse === '') {
-            messageToGemini = "start a mock interview";
+        // This condition is still needed to trigger the very first response from the AI
+        // when the user's initial input is empty (i.e., when they just start the session).
+        if (chatSession.history.length === 0 && (userResponse === '' || userResponse === null)) {
+            messageToGemini = "start a mock interview session"; 
         }
 
         const chat = model.startChat({
             history: formatHistoryForGemini(chatSession.history)
         });
 
+        // Push the user's actual (or placeholder) message to history
         chatSession.history.push({ role: 'user', text: messageToGemini });
 
         const result = await chat.sendMessageStream(messageToGemini);
@@ -149,16 +153,11 @@ app.post('/api/interview', async (req, res) => {
 
     } catch (error) {
         console.error('Error in /api/interview:', error);
-        // Prioritize specific database errors
         if (error.message.includes('Database') || (error.message.includes('MongoDB') && !error.message.includes('Cast to ObjectId'))) {
             res.status(500).json({ error: 'Failed to access chat session in database.' });
-        }
-        // Then, prioritize specific Gemini AI errors and match the test's expectation
-        else if (error.message.includes('Gemini AI') || error.message.includes('GoogleGenerativeAI') || error.message.includes('AI response')) {
+        } else if (error.message.includes('Gemini AI') || error.message.includes('GoogleGenerativeAI') || error.message.includes('AI response')) {
             res.status(500).json({ error: 'Failed to process interview request or get AI response. Please check backend logs for details.' });
-        }
-        // Fallback for any other errors (also matching the test's expectation for the general case)
-        else {
+        } else {
             res.status(500).json({ error: 'Failed to process interview request or get AI response. Please check backend logs for details.' });
         }
     }
