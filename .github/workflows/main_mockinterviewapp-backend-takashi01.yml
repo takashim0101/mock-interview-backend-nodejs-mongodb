@@ -24,6 +24,9 @@ jobs:
           npm install
           npm run build --if-present
           npm run test --if-present
+        env: 
+          DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       - name: Zip artifact for deployment
         run: |
           # IMPORTANT CHANGE: Exclude node_modules from the zip. Azure will install them directly on the server.
@@ -57,7 +60,7 @@ jobs:
           auth-type: SERVICE_PRINCIPAL
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v2 # v2のままです
+        uses: azure/webapps-deploy@v2 
         with:
           app-name: 'mockinterviewapp-backend-takashi01'
           slot-name: 'Production'
