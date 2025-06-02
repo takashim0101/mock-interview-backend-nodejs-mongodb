@@ -1,19 +1,11 @@
-Merge pull request #22 from takashim0101/takashi #25
-Jobs
-Run details
-Workflow file for this run
-.github/workflows/main_mockinterviewapp-backend-takashi01.yml at 4a62e8e
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
-
 name: Build and deploy Node.js app to Azure Web App - mockinterviewapp-backend-takashi01
-
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,7 +17,6 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18.x' # Set to 18.x to match your Azure App Service setting. You can test 22.x later if needed.
-
       - name: npm install, build, and test # This step still runs local install for building/testing on GitHub runner
         run: |
           npm install
@@ -42,7 +33,6 @@ jobs:
         with:
           name: node-app
           path: release.zip
-
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -70,6 +60,6 @@ jobs:
           app-name: 'mockinterviewapp-backend-takashi01'
           slot-name: 'Production'
           package: .
-          # IMPORTANT CHANGE: enable-oryx-build は削除します
-          # 代わりに startup-command を使って npm install と node server.js を実行します
-          startup-command: 'npm install && node server.js' # <-- この行を追加・修正します！
+          # IMPORTANT CHANGE: enable-oryx-build is removed.
+          # Instead, use startup-command to run npm install and node server.js.
+          startup-command: 'npm install && node server.js' # <-- Add/modify this line!
