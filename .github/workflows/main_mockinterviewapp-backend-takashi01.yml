@@ -19,6 +19,8 @@ jobs:
           node-version: '18.x' # Set to 18.x to match your Azure App Service setting. You can test 22.x later if needed.
       - name: npm install, build, and test # This step still runs local install for building/testing on GitHub runner
         run: |
+          npm cache clean --force # Add this line to clear npm cache
+          rm -rf node_modules     # Add this line to remove existing node_modules
           npm install
           npm run build --if-present
           npm run test --if-present
