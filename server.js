@@ -12,7 +12,6 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(express.json());
 
-
 // CORS configuration
 const allowedOrigins = [
     'http://localhost:5173',
