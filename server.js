@@ -20,11 +20,17 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
+        console.log('CORS Request Origin:', origin); // 追加: CORS リクエストのオリジンをログに出力
+        if (!origin) {
+            console.log('CORS: Origin is null (e.g., same-origin or non-browser request)'); // 追加: オリジンがnullの場合のログ
+            return callback(null, true);
+        }
         if (allowedOrigins.indexOf(origin) === -1) {
             const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            console.error('CORS Error: Blocked origin', origin); // 追加: ブロックされたオリジンをエラーログに出力
             return callback(new Error(msg), false);
         }
+        console.log('CORS: Allowed origin', origin); // 追加: 許可されたオリジンをログに出力
         return callback(null, true);
     },
     credentials: true
@@ -32,21 +38,26 @@ app.use(cors({
 
 // MongoDB Connection
 const DB_CONNECTION_STRING = process.env.DB_CONNECTION_STRING;
-if (DB_CONNECTION_STRING) {
+if (!DB_CONNECTION_STRING) {
+    console.error('CRITICAL ERROR: DB_CONNECTION_STRING is not set. Application cannot start.');
+    process.exit(1); // 環境変数がない場合、アプリケーションを終了
+} else {
     mongoose.connect(DB_CONNECTION_STRING)
         .then(() => console.log('Successfully connected to MongoDB!'))
-        .catch(err => console.error('MongoDB connection error:', err));
-} else {
-    console.warn('DB_CONNECTION_STRING is not set in .env. Database operations will fail.');
+        .catch(err => {
+            console.error('MongoDB connection error:', err);
+            process.exit(1); // データベース接続エラー時もアプリケーションを終了
+        });
 }
 
 // Google Generative AI setup
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 let geminiAi;
-if (GOOGLE_API_KEY) {
-    geminiAi = new GoogleGenerativeAI(GOOGLE_API_KEY);
+if (!GOOGLE_API_KEY) {
+    console.error('CRITICAL ERROR: GOOGLE_API_KEY is not set. Application cannot start without AI features.');
+    process.exit(1); // 環境変数がない場合、アプリケーションを終了
 } else {
-    console.warn('GOOGLE_API_KEY is not set in .env. AI features will not be available.');
+    geminiAi = new GoogleGenerativeAI(GOOGLE_API_KEY);
 }
 
 // MongoDB Chat Session Model
@@ -86,6 +97,11 @@ app.post('/api/interview', async (req, res) => {
                 history: []
             });
             console.log(`New chat session created for sessionId: ${sessionId}`);
+        }
+
+        // geminiAi が初期化されていることを確認する（念のため）
+        if (!geminiAi) {
+            throw new Error('Gemini AI is not initialized. GOOGLE_API_KEY might be missing or invalid.');
         }
 
         const model = geminiAi.getGenerativeModel({
@@ -133,10 +149,14 @@ app.post('/api/interview', async (req, res) => {
 
     } catch (error) {
         console.error('Error in /api/interview:', error);
-        if (error.message.includes('Database')) {
+        // エラーメッセージに 'Database' または 'Gemini AI' が含まれるか確認し、より具体的なエラーメッセージを返す
+        if (error.message.includes('Database') || (error.message.includes('MongoDB') && !error.message.includes('Cast to ObjectId'))) {
             res.status(500).json({ error: 'Failed to access chat session in database.' });
-        } else {
-            res.status(500).json({ error: 'Failed to process interview request or get AI response. Please check backend logs for details.' });
+        } else if (error.message.includes('Gemini AI') || error.message.includes('GoogleGenerativeAI')) {
+            res.status(500).json({ error: 'Failed to get AI response. Please check backend logs and GOOGLE_API_KEY.' });
+        }
+        else {
+            res.status(500).json({ error: 'Failed to process interview request. Please check backend logs for details.' });
         }
     }
 });
@@ -146,9 +166,10 @@ let server;
 if (require.main === module) {
     server = app.listen(port, () => {
         console.log(`Backend server running on http://localhost:${port}`);
-        console.log(`MongoDB connection string in use: ${DB_CONNECTION_STRING ? 'Set' : 'NOT SET (check .env)'}`);
-        console.log(`Google API Key in use: ${GOOGLE_API_KEY ? 'Set' : 'NOT SET (check .env)'}`);
-        console.log(`CORS allowed origins in server.js: ${allowedOrigins.join(', ')}`);
+        console.log(`Actual port being listened on: ${port}`); // 追加: 実際にリッスンしているポートをログに出力
+        console.log(`DB_CONNECTION_STRING status: ${DB_CONNECTION_STRING ? 'Set and Used' : 'NOT SET'}`);
+        console.log(`GOOGLE_API_KEY status: ${GOOGLE_API_KEY ? 'Set and Used' : 'NOT SET'}`);
+        console.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
     });
 }
 
