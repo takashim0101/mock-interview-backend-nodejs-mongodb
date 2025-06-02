@@ -24,7 +24,7 @@ jobs:
           npm install
           npm run build --if-present
           npm run test --if-present
-        env: # ここにenvブロックを追加し、シークレットを環境変数として渡します
+        env: # Inject secrets as environment variables for the build/test step
           DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       - name: Zip artifact for deployment
@@ -60,11 +60,11 @@ jobs:
           auth-type: SERVICE_PRINCIPAL
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v2 # v2のままです
+        uses: azure/webapps-deploy@v2 # Keep v2
         with:
           app-name: 'mockinterviewapp-backend-takashi01'
           slot-name: 'Production'
           package: .
           # IMPORTANT CHANGE: enable-oryx-build is removed.
           # Instead, use startup-command to run npm install and node server.js.
-          startup-command: 'npm install && node server.js' # <-- Add/modify this line!
+          startup-command: 'npm install && node server.js'
