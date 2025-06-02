@@ -1,72 +1,77 @@
-// tests/api-1.test.js
+// C:\Level 5\Mission 3_1\mock-interview-backend-nodejs-mongodb\tests\api-1.test.js
 
 const request = require('supertest');
-const mongoose = require('mongoose'); // Keep this, as we're mocking it
+const mongoose = require('mongoose');
 
-// Mongoose mock adjusted - IMPORTANT CHANGES HERE
+// --- REFINED Mongoose Mocking ---
+// This mock needs to precisely control the ChatSession model's behavior,
+// including its constructor, static methods (like findOne), and instance methods (like save).
 jest.mock('mongoose', () => {
-    const actualMongoose = jest.requireActual('mongoose');
+    const actualMongoose = jest.requireActual('mongoose'); // Get real Mongoose for non-mocked parts
 
-    // Store a reference to the mocked constructor for its methods (like findOne)
-    let mockChatSessionConstructorReference;
-
-    // Mock the constructor itself
+    // Define a mock constructor for ChatSession
     const mockChatSessionConstructor = jest.fn(function(data) {
         // This 'this' refers to the instance created by `new ChatSession(data)`
-        this.sessionId = data ? data.sessionId : undefined;
-        this.jobTitle = data ? data.jobTitle : undefined;
-        this.history = data ? (data.history ? [...data.history] : []) : []; // Deep copy history for new instances
-        this.save = jest.fn(() => Promise.resolve(this)); // Mock save on the instance
-        return this; // Return the instance
+        this.sessionId = data.sessionId;
+        this.jobTitle = data.jobTitle;
+        this.history = data.history ? [...data.history] : []; // Ensure history is copied for new instances
+        // Mock save() for THIS specific instance, resolving with the instance itself
+        this.save = jest.fn().mockResolvedValue(this);
+        return this; // Return the created instance
     });
 
     // Attach static methods directly to the mocked constructor
     mockChatSessionConstructor.findOne = jest.fn();
-
-    // Store the reference to the constructor mock for later use in beforeEach/afterEach
-    mockChatSessionConstructorReference = mockChatSessionConstructor;
+    // If you had other static methods like .create(), you'd mock them here:
+    // mockChatSessionConstructor.create = jest.fn();
 
     return {
-        ...actualMongoose, // Keep actual Schema and other non-mocked parts
-        connect: jest.fn(() => Promise.resolve()),
+        ...actualMongoose, // Keep actual Schema and other non-mocked parts of mongoose
+        connect: jest.fn(() => Promise.resolve()), // Mock connect to always succeed
+        // When mongoose.model is called, return our mocked ChatSession constructor
         model: jest.fn((name, schema) => {
-            // When mongoose.model is called, return our mocked constructor
-            return mockChatSessionConstructorReference;
+            if (name === 'ChatSession') { // Ensure we're returning the right mock for ChatSession
+                return mockChatSessionConstructor;
+            }
+            // If you had other models, you'd return other mocks here
+            return actualMongoose.model(name, schema); // Fallback for other models
         }),
         // Explicitly mock mongoose.connection for the `afterAll` cleanup
         connection: {
             readyState: 1, // Simulate connected state by default
-            disconnect: jest.fn(() => Promise.resolve())
+            disconnect: jest.fn(() => Promise.resolve()) // Mock disconnect to always succeed
         },
-        Schema: actualMongoose.Schema, // Use the actual Schema
+        Schema: actualMongoose.Schema, // Use the actual Schema constructor
     };
 });
 
-// REFINED GoogleGenerativeAI MOCK
-const mockSendMessageStream = jest.fn();
+
+// --- REFINED GoogleGenerativeAI MOCK ---
+// Define mocks for the methods that will be called.
+const mockSendMessageStream = jest.fn(); // This is the core mock for stream behavior, will be overridden
 const mockStartChat = jest.fn(() => ({
-    sendMessageStream: mockSendMessageStream
+    sendMessageStream: mockSendMessageStream // Point sendMessageStream to our changeable mock
 }));
 const mockGetGenerativeModel = jest.fn(() => ({
     startChat: mockStartChat
 }));
 
-const mockGenAIInstance = {
-    getGenerativeModel: mockGetGenerativeModel
-};
-
 jest.mock('@google/generative-ai', () => {
     return {
-        GoogleGenerativeAI: jest.fn(() => mockGenAIInstance)
+        // The GoogleGenerativeAI constructor itself.
+        // It should return an object that has getGenerativeModel.
+        GoogleGenerativeAI: jest.fn(() => ({
+            getGenerativeModel: mockGetGenerativeModel // Point getGenerativeModel to our mock
+        }))
     };
 });
 // ***************************************************************
 
 
-// Import `server.js` now.
+// Import `server.js` now. This ensures mocks are applied before server.js is loaded.
 const app = require('../server');
-// If server.js exports a serverInstance, grab it to close it later.
-const serverInstance = app.serverInstance; // This will be undefined in tests, which is fine for supertest
+// The serverInstance is typically undefined in test contexts when using supertest, which is fine.
+const serverInstance = app.serverInstance;
 
 // Get reference to our mocked Mongoose model (which is the mocked constructor)
 const ChatSession = mongoose.model('ChatSession');
@@ -76,48 +81,42 @@ describe('API: Interview Endpoint (/api/interview)', () => {
     // Before each test, reset mocks and ensure a clean state
     beforeEach(() => {
         // Spy on console.log and console.error to suppress them during tests
+        // This prevents test output from being cluttered by server logs.
         jest.spyOn(console, 'log').mockImplementation(() => {});
         jest.spyOn(console, 'error').mockImplementation(() => {});
 
-        // Clear all mock calls on specific functions and constructors
-        jest.clearAllMocks(); // This clears calls on ChatSession.findOne and ChatSession constructor itself
+        // Clear all mock calls on specific functions and constructors.
+        // This is crucial to ensure tests are isolated and don't affect each other.
+        jest.clearAllMocks(); // Clears calls on ChatSession.findOne, ChatSession constructor, instance.save(), etc.
 
-        // Clear mocks for Google Generative AI components
-        mockGetGenerativeModel.mockClear();
-        mockStartChat.mockClear();
-        mockSendMessageStream.mockClear();
-
-        // Clear mocks for Mongoose components (though jest.clearAllMocks covers most)
-        mongoose.connect.mockClear();
-        mongoose.connection.disconnect.mockClear();
-        // The ChatSession constructor and its static methods are cleared by clearAllMocks if they are part of the mock
-
-        // Default mock for findOne: session not found initially
+        // Default mock for findOne: session not found initially.
+        // This ensures the first test (new session) works as expected.
         ChatSession.findOne.mockResolvedValue(null);
 
-        // Reset the default readyState for mongoose connection
+        // Reset the default readyState for mongoose connection (important if tests change it).
         mongoose.connection.readyState = 1;
 
-        // Configure the mocked Gemini API response
+        // Configure the DEFAULT mocked Gemini API response for passing scenarios.
+        // This mock will be used unless explicitly overridden in a specific test.
         mockSendMessageStream.mockImplementation(async (message) => {
             let responseText = '';
             if (message === "start a mock interview") {
                 responseText = "Tell me about yourself.";
-            } else if (message === "I'm a data scientist with a background in machine learning.") { // Specific user response for this test
+            } else if (message === "I'm a data scientist with a background in machine learning.") {
                 responseText = "Your skills are good. What is your experience?";
-            } else if (message === "Tell me about my skills.") { // Example for specific user input
+            } else if (message === "Tell me about my skills.") {
                 responseText = "Your skills are good. What is your experience?";
-            } else if (message === "I'm a software engineer with 5 years experience.") { // Example for specific user input
+            } else if (message === "I'm a software engineer with 5 years experience.") {
                 responseText = "That's great. Can you tell me about your biggest challenge?";
             } else {
-                responseText = "Thank you for your response. What's next?"; // Generic fallback
+                responseText = "Thank you for your response. What's next?"; // Generic fallback for other inputs
             }
 
-            // Simulate streaming by generating chunks
+            // Simulate streaming by generating chunks.
             const chunks = responseText.split(' ').map(word => ({ text: () => word + ' ' }));
-            chunks.push({ text: () => '' }); // Final empty chunk for stream end
+            chunks.push({ text: () => '' }); // Final empty chunk to signal stream end
 
-            // Return an async iterator for the stream
+            // Return an async iterator for the stream, as expected by `for await (const chunk of result.stream)`
             return {
                 stream: (async function* () {
                     for (const chunk of chunks) {
@@ -128,18 +127,18 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         });
     });
 
-    // After each test, restore the original console.log and console.error implementations
+    // After each test, restore the original console.log and console.error implementations.
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    // Clean up: Close the server after all tests are done
+    // Clean up: Close the server and disconnect MongoDB after all tests are done.
     afterAll(async () => {
         if (mongoose.connection.readyState === 1) { // 1 means connected
             await mongoose.disconnect();
         }
         // If serverInstance was actually created (when server.js runs as main), close it.
-        // Supertest handles its own server, so serverInstance is usually undefined in tests, which is fine.
+        // Supertest handles its own server for tests, so serverInstance is usually undefined, which is fine.
         if (serverInstance && serverInstance.listening) {
             await new Promise(resolve => serverInstance.close(resolve));
         }
@@ -152,6 +151,9 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         const sessionId = 'test-session-1';
         const jobTitle = 'Software Engineer';
         const userResponse = ''; // Initial empty response to trigger first question
+
+        // ChatSession.findOne will return null due to beforeEach default,
+        // so server.js will create a new session.
 
         const res = await request(app)
             .post('/api/interview')
@@ -166,12 +168,16 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         expect(res.body.history[1].role).toBe('model');
         expect(res.body.history[1].text).toContain('Tell me about yourself.');
 
+        // Verify that ChatSession.findOne was called to check for existing session
         expect(ChatSession.findOne).toHaveBeenCalledWith({ sessionId });
-        // The ChatSession constructor should be called exactly once for a new session
+        // Verify that the ChatSession constructor was called exactly once for a new session
         expect(ChatSession).toHaveBeenCalledTimes(1);
+        // Verify the jobTitle passed to the new ChatSession instance
         expect(ChatSession.mock.calls[0][0].jobTitle).toBe(jobTitle);
-        // Get the instance created by the server and check its save method
+
+        // Retrieve the instance created by the mocked ChatSession constructor
         const createdSessionInstance = ChatSession.mock.results[0].value;
+        // Verify that the save method was called on this newly created instance
         expect(createdSessionInstance.save).toHaveBeenCalledTimes(1);
     });
 
@@ -182,16 +188,15 @@ describe('API: Interview Endpoint (/api/interview)', () => {
             { role: 'user', text: 'start a mock interview' },
             { role: 'model', text: 'Tell me about yourself.' }
         ];
-        // This user response now has a specific mock for it
         const userResponse = "I'm a data scientist with a background in machine learning.";
 
-        // Mock findOne to return an existing session
-        // Make sure the mock object has a save method, as the server will call it
+        // Mock findOne to return an existing session.
+        // IMPORTANT: The returned mock object must have a `save` method.
         const existingSessionMock = {
             sessionId,
             jobTitle,
-            history: [...initialHistory], // IMPORTANT: Copy the array
-            save: jest.fn(function() { return Promise.resolve(this); }), // Mock save on this specific existing session object, returning `this` for updated history
+            history: [...initialHistory], // Use spread to create a shallow copy
+            save: jest.fn(function() { return Promise.resolve(this); }), // Mock save on this specific object
         };
         ChatSession.findOne.mockResolvedValue(existingSessionMock);
 
@@ -202,16 +207,17 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         expect(res.statusCode).toEqual(200);
         expect(res.body).toHaveProperty('response');
         expect(res.body.response).toContain('What is your experience?');
-        // Corrected expectation for history length: initial (2) + user (1) + model (1) = 4
-        expect(res.body.history).toHaveLength(4); // Changed from initialHistory.length + 2 to 4
-        expect(res.body.history[initialHistory.length].role).toBe('user'); // Index 2
+        // Expected history length: initial (2) + user (1) + model (1) = 4
+        expect(res.body.history).toHaveLength(initialHistory.length + 2);
+        expect(res.body.history[initialHistory.length].role).toBe('user');
         expect(res.body.history[initialHistory.length].text).toBe(userResponse);
-        expect(res.body.history[initialHistory.length + 1].role).toBe('model'); // Index 3
+        expect(res.body.history[initialHistory.length + 1].role).toBe('model');
         expect(res.body.history[initialHistory.length + 1].text).toContain('What is your experience?');
 
         expect(ChatSession.findOne).toHaveBeenCalledWith({ sessionId });
         expect(existingSessionMock.save).toHaveBeenCalledTimes(1);
-        expect(ChatSession).not.toHaveBeenCalled(); // Ensure constructor is not called for existing session
+        // Ensure ChatSession constructor is NOT called for an existing session
+        expect(ChatSession).not.toHaveBeenCalled();
     });
 
     // --- Negative Scenarios ---
@@ -248,6 +254,7 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         const jobTitle = 'Engineer';
         const userResponse = 'initial';
 
+        // Mock ChatSession.findOne to reject, simulating a database error
         ChatSession.findOne.mockRejectedValue(new Error('Database connection lost'));
 
         const res = await request(app)
@@ -257,6 +264,8 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         expect(res.statusCode).toEqual(500);
         expect(res.body.error).toEqual('Failed to access chat session in database.');
         expect(ChatSession.findOne).toHaveBeenCalledWith({ sessionId });
+        // Ensure no new session is attempted to be created or saved if findOne fails
+        expect(ChatSession).not.toHaveBeenCalled();
     });
 
     test('should return 500 if Gemini API call fails', async () => {
@@ -264,10 +273,21 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         const jobTitle = 'Designer';
         const userResponse = 'tell me about yourself';
 
-        // Mock Gemini API to throw an error
-        mockSendMessageStream.mockImplementation(async () => {
+        // Override the default mockSendMessageStream for THIS specific test to throw an error.
+        mockSendMessageStream.mockImplementation(() => {
             throw new Error('Gemini API rate limit exceeded');
         });
+
+        // Crucially, mock findOne to return an *existing* session.
+        // This ensures the `else` block in `server.js` (where Gemini API is called) is executed.
+        const existingSessionMock = {
+            sessionId,
+            jobTitle,
+            // Provide some minimal history, as the `startChat` method expects it.
+            history: [{ role: 'user', text: 'start interview' }, { role: 'model', text: 'Hi!' }],
+            save: jest.fn().mockResolvedValue(this), // Mock save on this object to prevent further errors
+        };
+        ChatSession.findOne.mockResolvedValue(existingSessionMock);
 
         const res = await request(app)
             .post('/api/interview')
@@ -275,7 +295,11 @@ describe('API: Interview Endpoint (/api/interview)', () => {
 
         expect(res.statusCode).toEqual(500);
         expect(res.body.error).toEqual('Failed to process interview request or get AI response. Please check backend logs for details.');
+        // Verify that the mockSendMessageStream was indeed called, triggering the error.
         expect(mockSendMessageStream).toHaveBeenCalled();
+        expect(ChatSession.findOne).toHaveBeenCalledWith({ sessionId });
+        // Ensure that `save` was NOT called on the session, as the Gemini API failure should prevent it.
+        expect(existingSessionMock.save).not.toHaveBeenCalled();
     });
 
     test('should handle empty user response after initial question', async () => {
@@ -287,24 +311,24 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         ];
         const userResponse = ''; // Empty response after initial question
 
+        // Mock findOne to return an existing session for this continuation test.
         const existingSessionMock = {
             sessionId,
             jobTitle,
-            history: [...initialHistory], // IMPORTANT: Copy the array
+            history: [...initialHistory], // Copy initial history
             save: jest.fn(function() { return Promise.resolve(this); }),
         };
         ChatSession.findOne.mockResolvedValue(existingSessionMock);
-
 
         const res = await request(app)
             .post('/api/interview')
             .send({ sessionId, jobTitle, userResponse });
 
         expect(res.statusCode).toEqual(200);
+        // Based on the default mock for sendMessageStream, it returns generic fallback.
         expect(res.body.response).toContain('Thank you for your response.');
-        // Corrected expected history length based on initial history (2) + user (1) + model (1) = 4
-        expect(res.body.history.length).toBe(4); // Changed from initialHistory.length + 2 to 4
-        expect(res.body.history[initialHistory.length].text).toBe(userResponse); // User's empty response is recorded. Index 2.
+        expect(res.body.history.length).toBe(initialHistory.length + 2); // Initial history + user + model response
+        expect(res.body.history[initialHistory.length].text).toBe(userResponse); // User's empty response is recorded.
         expect(existingSessionMock.save).toHaveBeenCalledTimes(1);
     });
 
@@ -319,12 +343,12 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         ];
         const userResponse = 'Agile and Scrum.';
 
+        // Mock findOne to return an existing session, ensuring history is deeply copied.
         const existingSessionMock = {
             sessionId,
             jobTitle,
-            // Deep copy history to ensure it's not modified by the mock directly
-            history: JSON.parse(JSON.stringify(initialHistory)),
-            save: jest.fn(function() { return Promise.resolve(this); }), // `this` will be the modified session object
+            history: JSON.parse(JSON.stringify(initialHistory)), // Deep copy to prevent unintended modifications by mock
+            save: jest.fn(function() { return Promise.resolve(this); }),
         };
         ChatSession.findOne.mockResolvedValue(existingSessionMock);
 
@@ -337,8 +361,8 @@ describe('API: Interview Endpoint (/api/interview)', () => {
         expect(mockGetGenerativeModel.mock.calls[0][0].model).toBe("gemini-1.5-flash");
         expect(mockGetGenerativeModel.mock.calls[0][0].systemInstruction.parts[0].text).toContain(`interviewer for a job titled "${jobTitle}"`);
 
-        // Prepare the history that *should* be passed to model.startChat
-        // This should be the initial history *before* the current user's message is added.
+        // Prepare the history that *should* be passed to model.startChat.
+        // This is the history *before* the current user's message is added for Gemini's context.
         const expectedGeminiStartChatHistory = initialHistory.map(item => ({
             role: item.role,
             parts: [{ text: item.text }]
@@ -348,10 +372,10 @@ describe('API: Interview Endpoint (/api/interview)', () => {
             history: expect.arrayContaining(expectedGeminiStartChatHistory)
         });
 
-        // Check that `sendMessageStream` received the correct current user message
+        // Check that `sendMessageStream` received the correct current user message.
         expect(mockSendMessageStream).toHaveBeenCalledWith(userResponse);
 
-        // Check that the saved history includes the new turn (user and model responses)
+        // Check that the saved history includes the new turn (user and model responses).
         expect(existingSessionMock.history.length).toBe(initialHistory.length + 2);
         expect(existingSessionMock.history[existingSessionMock.history.length - 2].role).toBe('user');
         expect(existingSessionMock.history[existingSessionMock.history.length - 2].text).toBe(userResponse);
